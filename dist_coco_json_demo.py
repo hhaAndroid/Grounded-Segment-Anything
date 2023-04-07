@@ -1,6 +1,7 @@
 import argparse
 import os
 import copy
+import warnings
 
 import numpy as np
 import torch
@@ -22,6 +23,7 @@ import matplotlib.pyplot as plt
 from pycocotools.coco import COCO
 import json
 import pycocotools.mask as mask_util
+from pycocotools.cocoeval import COCOeval
 
 
 def load_image(image_path):
@@ -41,7 +43,7 @@ def load_image(image_path):
 
 def load_model(model_config_path, model_checkpoint_path, cpu_only=True):
     args = SLConfig.fromfile(model_config_path)
-    args.device = "cuda" if not cpu_only else "cpu"
+    args.device = "cpu"
     model = build_model(args)
     checkpoint = torch.load(model_checkpoint_path, map_location="cpu")
     load_res = model.load_state_dict(clean_state_dict(checkpoint["model"]), strict=False)
@@ -58,7 +60,8 @@ def get_grounding_output(model, image, caption, box_threshold, text_threshold, w
 
     if off_load:
         model = model.to(get_device())
-        image = image.to(get_device())
+
+    image = image.to(next(model.parameters()).device)
     with torch.no_grad():
         outputs = model(image[None], captions=[caption])
 
@@ -67,7 +70,6 @@ def get_grounding_output(model, image, caption, box_threshold, text_threshold, w
 
     logits = outputs["pred_logits"].cpu().sigmoid()[0]  # (nq, 256)
     boxes = outputs["pred_boxes"].cpu()[0]  # (nq, 4)
-    logits.shape[0]
 
     # filter output
     logits_filt = logits.clone()
@@ -75,10 +77,13 @@ def get_grounding_output(model, image, caption, box_threshold, text_threshold, w
     filt_mask = logits_filt.max(dim=1)[0] > box_threshold
     logits_filt = logits_filt[filt_mask]  # num_filt, 256
     boxes_filt = boxes_filt[filt_mask]  # num_filt, 4
-    logits_filt.shape[0]
 
     # get phrase
-    tokenlizer = model.tokenizer
+    if hasattr(model, 'module'):
+        tokenlizer = model.module.tokenizer
+    else:
+        tokenlizer = model.tokenizer
+
     tokenized = tokenlizer(caption)
     # build pred
     pred_phrases = []
@@ -139,7 +144,7 @@ from torch.utils.data import DataLoader, Dataset
 from mmengine.dataset import DefaultSampler, default_collate, worker_init_fn
 from functools import partial
 from mmengine.dist import (broadcast, get_dist_info, get_rank, init_dist,
-                           is_distributed, master_only, collect_results,barrier)
+                           is_distributed, master_only, collect_results, barrier)
 from mmengine.device import get_device
 from torch.nn.parallel import DistributedDataParallel
 
@@ -173,8 +178,8 @@ if __name__ == "__main__":
     parser.add_argument("--text_prompt", "-t", type=str, default='coco_cls_name.txt', help="text prompt")
     parser.add_argument("--box_threshold", type=float, default=0.3, help="box threshold")
     parser.add_argument("--text_threshold", type=float, default=0.25, help="text threshold")
-    parser.add_argument("--off_load", action="store_false")
-    parser.add_argument("--sam_cpu_only", action="store_false")
+    parser.add_argument("--off-load", action="store_true")
+    parser.add_argument("--sam-cpu", action="store_true")
     parser.add_argument(
         '--launcher',
         choices=['none', 'pytorch', 'slurm', 'mpi'],
@@ -186,8 +191,8 @@ if __name__ == "__main__":
         os.environ['LOCAL_RANK'] = str(args.local_rank)
 
     off_load = args.off_load
-    sam_cpu_only = args.sam_cpu_only
-    print('off_load:', off_load, 'sam_cpu_only:', sam_cpu_only)
+    sam_cpu = args.sam_cpu
+    print('off_load:', off_load, 'sam_cpu:', sam_cpu)
 
     if args.launcher == 'none':
         _distributed = False
@@ -206,7 +211,14 @@ if __name__ == "__main__":
     text_prompt = coco_cls_str.replace('\n', ',')
 
     cls_name = coco_cls_str.split('\n')
-    cls_name1 = [cls.split(' ') for cls in cls_name]
+    cls_name1 = []
+    for cls in cls_name:
+        x1 = cls.split(' ')
+        x = copy.deepcopy(x1)
+        if len(x1) > 1:
+            x.append(' '.join(x1))
+            x.append(' '.join(x1[::-1]))
+        cls_name1.append(x)
 
     coco = COCO(os.path.join(args.data_root, args.ann_file))
 
@@ -215,7 +227,6 @@ if __name__ == "__main__":
         name2id[categories['name']] = categories['id']
 
     coco_dataset = SimpleDataset(coco.getImgIds())
-
     print('data_len', len(coco_dataset), 'num_word_size', get_dist_info()[1])
 
     sampler = DefaultSampler(coco_dataset, False)
@@ -259,8 +270,11 @@ if __name__ == "__main__":
     else:
         if not off_load:
             model = model.to(get_device())
-            if not sam_cpu_only:
+            if not sam_cpu:
                 predictor.model = predictor.model.to(get_device())
+
+    if _distributed:
+        predictor.model = predictor.model.module
 
     annotations = []
     coco_preds = {}
@@ -271,13 +285,14 @@ if __name__ == "__main__":
         new_json_data = dict(annotation=[])
         image_id = data[0]
         raw_img_info = coco.loadImgs([image_id])[0]
+        raw_img_info['img_id'] = image_id
         new_json_data['image'] = raw_img_info
 
         file_name = raw_img_info['file_name']
         image_path = os.path.join(args.data_root, args.data_prefix, file_name)
 
         if get_rank() == 0:
-            print('len:', len(data_loader), 'iter', i+1)
+            print('len:', len(data_loader), 'iter', i + 1)
 
         # load image
         image_pil, image = load_image(image_path)
@@ -302,7 +317,7 @@ if __name__ == "__main__":
         image = cv2.imread(image_path)
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
-        if off_load and not sam_cpu_only:
+        if off_load and not sam_cpu:
             predictor.model = predictor.model.to(get_device())
 
         predictor.set_image(image)
@@ -318,6 +333,7 @@ if __name__ == "__main__":
         pred_dict['boxes'] = boxes_filt
 
         transformed_boxes = predictor.transform.apply_boxes_torch(boxes_filt, image.shape[:2])
+        transformed_boxes = transformed_boxes.to(predictor.model.device)
 
         masks, _, _ = predictor.predict_torch(
             point_coords=None,
@@ -326,19 +342,40 @@ if __name__ == "__main__":
             multimask_output=False
         )
 
-        if off_load and not sam_cpu_only:
+        if off_load and not sam_cpu:
             predictor.model = predictor.model.to('cpu')
 
-        pred_dict['masks'] = masks.numpy()
+        pred_dict['masks'] = masks.cpu().numpy()
         pred_dict['boxes'] = pred_dict['boxes'].int().numpy().tolist()
 
         for i in range(len(pred_dict['boxes'])):
             label = pred_dict['labels'][i][:-6]
+            score = pred_dict['labels'][i][-5:-2]
 
-            for cls in cls_name1:
-                if label in cls:
-                    cls_nam = ' '.join(cls)
+            label = label.replace('##', '')
+
+            # hack process
+            xx = label.split(' ')
+            if len(xx) > 1:
+                xx = xx[:2]
+            xx = list(set(xx))
+
+            cls_idx = None
+            for j, cls in enumerate(cls_name1):
+                if label in cls or xx[0] in cls or (len(xx) == 2 and xx[1] in cls):
+                    # dog dog,
+                    cls_idx = j
                     break
+                if len(xx) == 1:
+                    # bag, pot
+                    for c in cls:
+                        if xx[0] in c:
+                            cls_idx = j
+                            break
+
+            if cls_idx is None:
+                warnings.warn(f"no match: {pred_dict['labels'][i]}")
+                continue
 
             bbox = pred_dict['boxes'][i]
             coco_bbox = [
@@ -351,8 +388,9 @@ if __name__ == "__main__":
             annotation = dict(
                 image_id=image_id,
                 bbox=coco_bbox,
+                score=float(score),
                 iscrowd=0,
-                category_id=name2id[cls_nam],
+                category_id=name2id[cls_name[cls_idx]],
                 area=coco_bbox[2] * coco_bbox[3])
 
             mask = pred_dict['masks'][i]
@@ -391,3 +429,10 @@ if __name__ == "__main__":
 
         with open(output_name, "w") as f:
             json.dump(new_json_data, f)
+
+        cocoDt = COCO(output_name)
+        for metric in ['bbox', 'segm']:
+            coco_eval = COCOeval(coco, cocoDt, iouType=metric)
+            coco_eval.evaluate()
+            coco_eval.accumulate()
+            coco_eval.summarize()
