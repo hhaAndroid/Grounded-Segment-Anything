@@ -22,6 +22,7 @@ import matplotlib.pyplot as plt
 from pycocotools.coco import COCO
 import json
 import pycocotools.mask as mask_util
+from pycocotools.cocoeval import COCOeval
 
 
 def load_image(image_path):
@@ -139,7 +140,7 @@ from torch.utils.data import DataLoader, Dataset
 from mmengine.dataset import DefaultSampler, default_collate, worker_init_fn
 from functools import partial
 from mmengine.dist import (broadcast, get_dist_info, get_rank, init_dist,
-                           is_distributed, master_only, collect_results,barrier)
+                           is_distributed, master_only, collect_results, barrier)
 from mmengine.device import get_device
 from torch.nn.parallel import DistributedDataParallel
 
@@ -277,7 +278,7 @@ if __name__ == "__main__":
         image_path = os.path.join(args.data_root, args.data_prefix, file_name)
 
         if get_rank() == 0:
-            print('len:', len(data_loader), 'iter', i+1)
+            print('len:', len(data_loader), 'iter', i + 1)
 
         # load image
         image_pil, image = load_image(image_path)
@@ -334,6 +335,7 @@ if __name__ == "__main__":
 
         for i in range(len(pred_dict['boxes'])):
             label = pred_dict['labels'][i][:-6]
+            score = pred_dict['labels'][i][-5:-2]
 
             for cls in cls_name1:
                 if label in cls:
@@ -351,6 +353,7 @@ if __name__ == "__main__":
             annotation = dict(
                 image_id=image_id,
                 bbox=coco_bbox,
+                score=float(score),
                 iscrowd=0,
                 category_id=name2id[cls_nam],
                 area=coco_bbox[2] * coco_bbox[3])
@@ -391,3 +394,11 @@ if __name__ == "__main__":
 
         with open(output_name, "w") as f:
             json.dump(new_json_data, f)
+
+        cocoDt = COCO(output_name)
+        for metric in ['bbox', 'segm']:
+            coco_eval = COCOeval(coco, cocoDt, iouType=metric)
+            coco_eval.evaluate()
+            coco_eval.accumulate()
+            coco_eval.summarize()
+
