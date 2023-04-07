@@ -109,7 +109,7 @@ def show_bbox_only(coco, anns, show_label_bbox=True, is_filling=True):
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Show coco json file')
-    parser.add_argument('--data-root', default='/home/PJLAB/huanghaian/dataset/coco1', help='dataset root')
+    parser.add_argument('--data-root', default='/home/PJLAB/huanghaian/dataset/coco10', help='dataset root')
     parser.add_argument(
         '--img-dir', default='val2017', help='image folder path')
     parser.add_argument(

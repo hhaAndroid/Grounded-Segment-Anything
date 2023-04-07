@@ -181,9 +181,10 @@ if __name__ == "__main__":
         "--checkpoint_path", "-p", type=str, default='groundingdino_swint_ogc.pth', help="path to checkpoint file"
     )
     parser.add_argument("--json", type=str,
-                        default='/home/PJLAB/huanghaian/dataset/coco1/annotations/instances_val2017.json',
+                        default='/home/PJLAB/huanghaian/dataset/coco10/annotations/instances_val2017.json',
                         help="path to image file")
-    parser.add_argument("--image-dir", "-i", type=str, default='/home/PJLAB/huanghaian/dataset/coco1/val2017',  help="path to image file")
+    parser.add_argument("--image-dir", "-i", type=str, default='/home/PJLAB/huanghaian/dataset/coco10/val2017',
+                        help="path to image file")
     parser.add_argument("--text_prompt", "-t", type=str, default='coco_cls_name.txt', help="text prompt")
     parser.add_argument("--box_threshold", type=float, default=0.3, help="box threshold")
     parser.add_argument("--text_threshold", type=float, default=0.25, help="text threshold")
@@ -228,6 +229,7 @@ if __name__ == "__main__":
     predictor = SamPredictor(build_sam(checkpoint="./sam_vit_h_4b8939.pth"))
 
     img_ids = coco.getImgIds()
+    annotations = []
 
     for image_id in img_ids:
         raw_img_info = coco.loadImgs([image_id])[0]
@@ -243,6 +245,9 @@ if __name__ == "__main__":
         boxes_filt, pred_phrases = get_grounding_output(
             model, image, text_prompt, box_threshold, text_threshold, cpu_only=args.cpu_only
         )
+        if boxes_filt.shape[0] == 0:
+            continue
+
         normalized_boxes = copy.deepcopy(boxes_filt)
 
         # visualize pred
@@ -279,8 +284,6 @@ if __name__ == "__main__":
         pred_dict['masks'] = masks.numpy()
         pred_dict['boxes'] = pred_dict['boxes'].int().numpy().tolist()
 
-        annotations = []
-
         for i in range(len(pred_dict['boxes'])):
             label = pred_dict['labels'][i][:-6]
 
@@ -313,8 +316,9 @@ if __name__ == "__main__":
                     encode_mask['counts'] = encode_mask['counts'].decode()
             annotation['segmentation'] = encode_mask
             annotations.append(annotation)
-        new_json_data['annotations'] = annotations
+
+    if len(annotations) > 0:
+        new_json_data['annotations']=annotations
 
     with open(output_name, "w") as f:
         json.dump(new_json_data, f)
-
