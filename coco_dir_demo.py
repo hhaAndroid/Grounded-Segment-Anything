@@ -152,11 +152,14 @@ def traverse_files(folder_path):
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser("Grounding DINO example", add_help=True)
-    parser.add_argument("--config_file", "-c", type=str, default='GroundingDINO/groundingdino/config/GroundingDINO_SwinT_OGC.py', help="path to config file")
+    parser.add_argument("--config_file", "-c", type=str,
+                        default='GroundingDINO/groundingdino/config/GroundingDINO_SwinT_OGC.py',
+                        help="path to config file")
     parser.add_argument(
         "--checkpoint_path", "-p", type=str, default='groundingdino_swint_ogc.pth', help="path to checkpoint file"
     )
-    parser.add_argument("--image-dir", "-i", type=str, default='dataset/coco10/val2017', help="path to image file")
+    parser.add_argument("--image-dir", "-i", type=str, default='/home/PJLAB/huanghaian/dataset/coco10/val2017',
+                        help="path to image file")
     parser.add_argument("--text_prompt", "-t", type=str, default='coco_cls_name.txt', help="text prompt")
     parser.add_argument(
         "--output_dir", "-o", type=str, default="outputs", help="output directory"
@@ -194,7 +197,7 @@ if __name__ == "__main__":
 
     for image_path in image_dir:
         print(image_path)
-        save_path= os.path.join(output_dir,os.path.basename(image_path))
+        save_path = os.path.join(output_dir, os.path.basename(image_path))
         # load image
         image_pil, image = load_image(image_path)
 

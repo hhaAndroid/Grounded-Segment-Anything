@@ -2,8 +2,8 @@ airplane
 apple
 backpack
 banana
-baseball_bat
-baseball_glove
+baseball bat
+baseball glove
 bear
 bed
 bench
@@ -19,24 +19,24 @@ cake
 car
 carrot
 cat
-cell_phone
+cell phone
 chair
 clock
 couch
 cow
 cup
-dining_table
+dining table
 dog
 donut
 elephant
-fire_hydrant
+fire hydrant
 fork
 frisbee
 giraffe
-hair_drier
+hair drier
 handbag
 horse
-hot_dog
+hot dog
 keyboard
 kite
 knife
@@ -46,10 +46,10 @@ motorcycle
 mouse
 orange
 oven
-parking_meter
+parking meter
 person
 pizza
-potted_plant
+potted plant
 refrigerator
 remote
 sandwich
@@ -60,21 +60,21 @@ skateboard
 skis
 snowboard
 spoon
-sports_ball
-stop_sign
+sports ball
+stop sign
 suitcase
 surfboard
-teddy_bear
-tennis_racket
+teddy bear
+tennis racket
 tie
 toaster
 toilet
 toothbrush
-traffic_light
+traffic light
 train
 truck
 tv
 umbrella
 vase
-wine_glass
+wine glass
 zebra
