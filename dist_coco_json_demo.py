@@ -353,6 +353,22 @@ if __name__ == "__main__":
             score = pred_dict['labels'][i][-5:-2]
 
             label = label.replace('##', '')
+            if label == 'handbager':
+                label = 'handbag'
+            elif label == 'baseballbet':
+                label = 'baseball bat'
+            elif label == 'keyboardboard':
+                label = 'keyboard'
+            elif label == 'refrigeratorboard':
+                label = 'refrigerator'
+            elif label == 'backpackbag':
+                label = 'backpack'
+            elif label == 'suitcaseer':
+                label = 'suitcase'
+            elif label == 'boardboard':
+                label = 'surfboard' # TODO
+            elif label == 'airplanefe':
+                label = 'airplane'
 
             # hack process
             xx = label.split(' ')
