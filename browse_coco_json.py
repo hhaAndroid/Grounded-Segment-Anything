@@ -10,10 +10,7 @@ from pycocotools.coco import COCO
 
 
 def show_coco_json(args):
-    if args.data_root is not None:
-        coco = COCO(osp.join(args.data_root, args.ann_file))
-    else:
-        coco = COCO(args.ann_file)
+    coco = COCO(args.ann_file)
     print(f'Total number of images：{len(coco.getImgIds())}')
     categories = coco.loadCats(coco.getCatIds())
     category_names = [category['name'] for category in categories]
@@ -114,7 +111,7 @@ def parse_args():
         '--img-dir', default='val2017', help='image folder path')
     parser.add_argument(
         '--ann-file',
-        default='annotations/instances_val2017_pred.json',
+        default='outputs/annotations/instances_val2017_pred.json',
         help='ann file path')
     parser.add_argument(
         '--wait-time', type=float, default=0, help='the interval of show (s)')
